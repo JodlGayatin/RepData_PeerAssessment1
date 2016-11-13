@@ -1,0 +1,159 @@
+---
+title: "Analysis of Activity"
+author: "Olson Jodl Ignacio Gayatin"
+date: "12 November 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+
+## Executive Summary
+
+This document details the analysis conducted on a dataset for personal monitoring activity as partial fulfillment of the requirements of the course on Reproducible Research.
+The data set is composed of number of steps measured in 5-minute intervals for 2 months.
+The mean steps per day has been measured to be 10766.
+There were a total of 17568 observations, 2304 of which are NAs. Imputing values based on the average steps for this interval did not result in a significant change in the mean and median of the dataset.
+A comparison of weekday and weekend patterns shows a slight difference in the peak patterns and difference in the mean. There were more steps done on the weekend vs weekday.
+
+## Initial Data Processing
+
+The data is read using the `read.csv` function. A review of the data reveals some NA values. Removal of the NA values have been incorporated in suceeding computations.
+```{r }
+data1 <- read.csv("activity.csv")
+dim(data1)
+head(data1)
+sum(is.na(data1$steps))
+```
+
+## Mean Total Number of Steps per Day
+
+To get the mean total number of steps per day the number of steps are aggregated by date. Since there are NA values the argument `na.rm=TRUE` had been added to the aggregate function.
+
+```{r}
+library(dplyr)
+stepsperday <- aggregate(steps~date, data1, sum, na.rm=TRUE)
+```
+
+The histogram is constructed using ggplot2 package.
+```{r}
+library(ggplot2)
+ggplot(stepsperday, aes(x = steps)) +
+  geom_histogram(fill = "green", binwidth = 1000) +
+  labs(title = "Histogram of Steps per Day", x = "Steps per Day", y = "Frequency")
+```
+
+The mean and median are calculated as follows
+
+```{r}
+meansteps <- mean(stepsperday$steps)
+mediansteps <- median(stepsperday$steps)
+meansteps
+mediansteps
+```
+
+## Average Daily Pattern
+
+To get the average daily pattern the number of steps is aggregated by the interval. Once again the NA values are excluded. 
+
+```{r}
+library(ggplot2)
+stepsperinterval <- aggregate(steps~interval, data1, mean, na.rm=TRUE)
+ggplot(stepsperinterval, aes(interval, steps)) + geom_line(color=rgb(0,0.8,0)) + labs(x="Interval", y ="Mean No. of Steps") 
+```
+
+The `max` function is used to determine the maximum mean of steps for interval. The `which.max` function is used to locate the specific interval. It is the 835th interval that contains the maximum mean steps with a value of 206.2.
+
+```{r}
+max(stepsperinterval$steps)
+stepsperinterval[which.max(stepsperinterval$steps),]$interval
+```
+
+## Imputing Data
+
+Since there are NA values we replace them by imputting the average number of steps belonging to that interval. The dataset `stepsperinterval` which we have earlier derived will be the source data for the average steps for that interval.
+
+```{r}
+new <- function(x, y){
+    newsteps <- x$steps
+    allnas <- which(is.na(newsteps))
+    for (a in allnas){
+        interval1 <- x[a,]$interval
+        avgstep <- y[y$interval==interval1,]$steps  
+        newsteps[a] <- avgstep
+    }
+    newsteps
+}
+
+newsteps <- new(data1, stepsperinterval)
+data2 <- data.frame(steps = newsteps, date=data1$date, interval=data1$interval)
+```
+
+A quick comparison of the first few rows of the original dataset `data1` and the new dataset `data2` shows that the NA values have been replaced. 
+
+```{r}
+head(data1)
+head(data2)
+```
+
+Here we check if there is any difference between the histogram of the original data set and the new data set with imputted values. We create an aggregation of the new data set and superimpose its histogram over the original dataset.
+Comparing the two plots we see that the histogram are almost similar.
+The only difference are the additional obervations in the middle area for the second set. 
+
+```{r}
+stepsperday2 <- aggregate(steps~date, data2, sum, na.rm=TRUE)
+```
+
+```{r}
+p1 <- hist(stepsperday$steps, breaks = seq(-250,21750,1000), plot = FALSE)
+p2 <- hist(stepsperday2$steps, breaks = seq(-250,21750,1000), plot = FALSE)
+plot( p1, col=rgb(1,0,0,alpha=0.5), xlim=c(-250,25000), ylim = c(0,15), main = "Comparison of Histogram", 
+      xlab="Average Total Number of Steps per Day")
+plot( p2, col=rgb(0,0,1,alpha=0.2), xlim=c(-250,25000), ylim = c(0,15), add=T)
+
+```
+
+A comparison of the mean of the two datasets shows no difference. There is only a difference of 1 between the medians.
+```{r}
+mean(stepsperday$steps)
+median(stepsperday$steps)
+mean(stepsperday2$steps)
+median(stepsperday2$steps)
+```
+
+
+## Weekday vs Weekend
+
+To compare the pattern between a weekday and a weekend, we convert the date data into a day. From the day data it was classified as either a "Weekday" or a "Weekend".
+The data set is then aggregated by day type.
+Based on the comparison. A weekday differs from a weekend pattern as marked by a single prominent peak with mean greater than 200. The weekend has several peaks.
+```{r}
+library(dplyr)
+library(lubridate)
+data2 <- mutate(data2, date = ymd(date), weekday = wday(date), day.type = ifelse(weekday != 1 & weekday != 7,"Weekday","Weekend"))
+data2 <- mutate(data2, day.type =as.factor(day.type))
+```
+
+```{r}
+intervalbysdaytype <- aggregate(steps~day.type+interval, data2, mean, na.rm=TRUE)
+ggplot(intervalbysdaytype, aes(x=interval, y=steps)) + 
+        geom_line(color=rgb(0,0.8,0)) + 
+        facet_wrap(~ day.type, nrow=2, ncol=1) +
+        labs(x="Interval No.", y="Ave No. of Total Steps")
+
+```
+
+More steps are done on average on weekends vs weekdays as indicated by the higher mean and median.
+
+```{r}
+data3<-aggregate(steps~day.type+date, data2, sum, na.rm=TRUE)
+```
+
+
+
+```{r}
+aggregate(steps~day.type,data3,mean)
+aggregate(steps~day.type,data3,median)
+```
+
